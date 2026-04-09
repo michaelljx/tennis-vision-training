@@ -94,22 +94,35 @@ def frames_to_array(frames: list) -> np.ndarray:
     return arr
 
 
+def find_nearest_frame_idx(all_frames: list, target_ts: float) -> int:
+    """
+    Return the index of the frame whose timestamp is closest to target_ts.
+    Frames are NOT assumed to be uniformly spaced (Vision only stores detected frames).
+    """
+    best_idx = 0
+    best_diff = abs(all_frames[0]["timestamp"] - target_ts)
+    for i, f in enumerate(all_frames[1:], 1):
+        diff = abs(f["timestamp"] - target_ts)
+        if diff < best_diff:
+            best_diff = diff
+            best_idx = i
+    return best_idx
+
+
 def extract_window(all_frames: list, stroke_frame_idx: int, pre: int, post: int) -> np.ndarray:
     """
     Extract a (pre+post, V, C) window centred on stroke_frame_idx.
-    Edge-pads if the window extends beyond video boundaries.
+    Edge-pads with the boundary frame if window extends beyond video.
+
+    Note: frames may be non-uniformly spaced in time (Vision skips frames
+    where no person is detected). We take a contiguous slice by index.
     """
     n = len(all_frames)
     start = stroke_frame_idx - pre
     end   = stroke_frame_idx + post  # exclusive
 
-    # Build padded index list
-    indices = []
-    for i in range(start, end):
-        indices.append(max(0, min(n - 1, i)))  # clamp
-
-    selected_frames = [all_frames[i] for i in indices]
-    return frames_to_array(selected_frames)
+    indices = [max(0, min(n - 1, i)) for i in range(start, end)]
+    return frames_to_array([all_frames[i] for i in indices])
 
 
 def infer_player_id(video_stem: str) -> str:
@@ -190,7 +203,6 @@ def main():
             continue
 
         all_frames = skel_data["frames"]
-        skeleton_fps = skel_data.get("fps", args.fps)
         player_id = infer_player_id(video_stem)
         is_val = player_id in val_players
 
@@ -201,10 +213,11 @@ def main():
                 skipped += 1
                 continue
 
-            # Locate the frame index using timestamp (re-calculate for 30fps)
+            # Find the stored frame whose timestamp is nearest to the annotation.
+            # We use timestamp-based lookup because Vision only stores frames where
+            # a person was detected, so the frame list is non-uniformly spaced.
             ts = ann["timestamp"]
-            frame_idx_30fps = round(ts * skeleton_fps)
-            frame_idx = max(0, min(len(all_frames) - 1, frame_idx_30fps))
+            frame_idx = find_nearest_frame_idx(all_frames, ts)
 
             window = extract_window(all_frames, frame_idx, args.pre, args.post)
             label  = CLASS_INDEX[stroke_type]
