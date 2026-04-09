@@ -7,8 +7,16 @@ import CoreImage
 import CoreMedia
 
 // ============================================================
-// Skeleton Extraction Tool for BiLSTM Training
-// Uses VNDetectHumanBodyPoseRequest (identical to iOS)
+// Skeleton Extraction Tool (30fps) for CTR-GCN Training
+// Uses VNDetectHumanBodyPoseRequest (identical to iOS runtime)
+//
+// Coordinate convention:
+//   Vision raw output: bottom-left origin [0,1]
+//   Stored in JSON:    top-left origin [0,1]  (Y already flipped)
+//   Model input:       additionally requires x↔y swap (done in build_windows.py)
+//
+// Usage:
+//   ./extract_skeletons --videos <dir> --output <dir> [--fps 30]
 // ============================================================
 
 // MARK: - COCO Joint Name Map (identical to iOS SkeletonExtractor)
@@ -83,7 +91,7 @@ class SkeletonExtractor {
         self.poseRequest = VNDetectHumanBodyPoseRequest()
     }
 
-    func extractSkeletons(from videoURL: URL, fps: Int = 5) -> VideoSkeleton? {
+    func extractSkeletons(from videoURL: URL, fps: Int = 30) -> VideoSkeleton? {
         let asset = AVAsset(url: videoURL)
 
         guard let videoTrack = asset.tracks(withMediaType: .video).first else {
@@ -93,7 +101,8 @@ class SkeletonExtractor {
 
         let duration = CMTimeGetSeconds(asset.duration)
         let videoFPS = videoTrack.nominalFrameRate
-        let frameInterval = Int(videoFPS / Float(fps))
+        // When video fps < target fps, keep every frame (interval=1)
+        let frameInterval = max(1, Int(round(videoFPS / Float(fps))))
 
         guard let reader = try? AVAssetReader(asset: asset) else {
             print("  ✗ Failed to create asset reader")
@@ -203,28 +212,71 @@ class SkeletonExtractor {
 
 // MARK: - Main Program
 
+func printUsage() {
+    print("Usage: extract_skeletons --videos <dir> --output <dir> [--fps 30]")
+    print("")
+    print("  --videos   Path to directory containing video files (.mov, .mp4, .m4v)")
+    print("  --output   Path to output directory for skeleton JSON files")
+    print("  --fps      Target extraction frame rate (default: 30)")
+    print("")
+    print("Example:")
+    print("  ./extract_skeletons --videos data/raw_videos --output data/skeletons_30fps")
+}
+
+func parseArgs() -> (videosDir: URL, outputDir: URL, fps: Int)? {
+    let args = CommandLine.arguments
+    var videosPath: String? = nil
+    var outputPath: String? = nil
+    var fps: Int = 30
+
+    var i = 1
+    while i < args.count {
+        switch args[i] {
+        case "--videos":
+            if i + 1 < args.count { videosPath = args[i + 1]; i += 2 } else { return nil }
+        case "--output":
+            if i + 1 < args.count { outputPath = args[i + 1]; i += 2 } else { return nil }
+        case "--fps":
+            if i + 1 < args.count, let v = Int(args[i + 1]) { fps = v; i += 2 } else { return nil }
+        case "--help", "-h":
+            printUsage(); exit(0)
+        default:
+            i += 1
+        }
+    }
+
+    // Fallback: if no args, try legacy sibling-directory layout (videos/ & skeletons/)
+    if videosPath == nil || outputPath == nil {
+        let execDir = URL(fileURLWithPath: CommandLine.arguments[0])
+            .deletingLastPathComponent().path
+        videosPath  = videosPath  ?? "\(execDir)/videos"
+        outputPath  = outputPath  ?? "\(execDir)/skeletons"
+    }
+
+    return (
+        URL(fileURLWithPath: videosPath!),
+        URL(fileURLWithPath: outputPath!),
+        fps
+    )
+}
+
 func main() {
-    print("🎾 Tennis Skeleton Extraction Tool")
+    print("🎾 Tennis Skeleton Extraction Tool (30fps build)")
     print("=" * 50)
 
-    let fileManager = FileManager.default
-
-    // Get the directory where this executable is located
-    let executablePath = CommandLine.arguments[0]
-    let executableURL = URL(fileURLWithPath: executablePath)
-    let programDir = executableURL.deletingLastPathComponent().path
-
-    let videosDir = URL(fileURLWithPath: programDir).appendingPathComponent("videos")
-    let skeletonsDir = URL(fileURLWithPath: programDir).appendingPathComponent("skeletons")
-
-    // Verify directories exist
-    guard fileManager.fileExists(atPath: videosDir.path) else {
-        print("✗ Error: videos/ directory not found")
-        print("  Please create it and add video files")
+    guard let (videosDir, skeletonsDir, targetFPS) = parseArgs() else {
+        printUsage()
         exit(1)
     }
 
-    // Create skeletons directory if needed
+    let fileManager = FileManager.default
+
+    guard fileManager.fileExists(atPath: videosDir.path) else {
+        print("✗ Error: videos directory not found: \(videosDir.path)")
+        exit(1)
+    }
+
+    // Create output directory if needed
     try? fileManager.createDirectory(at: skeletonsDir, withIntermediateDirectories: true)
 
     // Find all video files
@@ -233,23 +285,23 @@ func main() {
         includingPropertiesForKeys: nil,
         options: [.skipsHiddenFiles]
     ) else {
-        print("✗ Error: Failed to read videos/ directory")
+        print("✗ Error: Failed to read videos directory")
         exit(1)
     }
 
     let videoExtensions = ["mp4", "mov", "m4v", "MP4", "MOV", "M4V"]
-    let videos = videoFiles.filter { url in
-        videoExtensions.contains(url.pathExtension)
-    }
+    let videos = videoFiles.filter { videoExtensions.contains($0.pathExtension) }.sorted { $0.lastPathComponent < $1.lastPathComponent }
 
     guard !videos.isEmpty else {
-        print("✗ No video files found in videos/")
+        print("✗ No video files found in: \(videosDir.path)")
         print("  Supported formats: MP4, MOV, M4V")
         exit(1)
     }
 
-    print("\nFound \(videos.count) video file(s)")
-    print("")
+    print("Videos dir:  \(videosDir.path)")
+    print("Output dir:  \(skeletonsDir.path)")
+    print("Target fps:  \(targetFPS)")
+    print("Found \(videos.count) video file(s)\n")
 
     let extractor = SkeletonExtractor()
     var successCount = 0
@@ -257,13 +309,19 @@ func main() {
 
     for (index, videoURL) in videos.enumerated() {
         let filename = videoURL.lastPathComponent
-        print("[\(index + 1)/\(videos.count)] Processing: \(filename)")
+        print("[\(index + 1)/\(videos.count)] \(filename)")
 
-        if let skeleton = extractor.extractSkeletons(from: videoURL, fps: 5) {
-            // Save JSON
-            let outputFilename = videoURL.deletingPathExtension().lastPathComponent + ".json"
-            let outputURL = skeletonsDir.appendingPathComponent(outputFilename)
+        let outputFilename = videoURL.deletingPathExtension().lastPathComponent + ".json"
+        let outputURL = skeletonsDir.appendingPathComponent(outputFilename)
 
+        // Skip already-processed files (resume support)
+        if fileManager.fileExists(atPath: outputURL.path) {
+            print("  ↷ Skipped (already exists)")
+            successCount += 1
+            continue
+        }
+
+        if let skeleton = extractor.extractSkeletons(from: videoURL, fps: targetFPS) {
             do {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -271,7 +329,7 @@ func main() {
                 try jsonData.write(to: outputURL)
 
                 let sizeKB = Double(jsonData.count) / 1024.0
-                print("  ✓ Saved: \(outputFilename) (\(skeleton.total_frames) frames, \(String(format: "%.1f", sizeKB)) KB)")
+                print("  ✓ \(outputFilename)  (\(skeleton.total_frames) frames, \(String(format: "%.1f", sizeKB)) KB)")
                 successCount += 1
             } catch {
                 print("  ✗ Failed to save JSON: \(error.localizedDescription)")
@@ -281,13 +339,11 @@ func main() {
             print("  ✗ Failed to extract skeletons")
             failCount += 1
         }
-
-        print("")
     }
 
-    print("=" * 50)
-    print("✓ Completed: \(successCount) succeeded, \(failCount) failed")
-    print("\nJSON files saved to: skeletons/")
+    print("\n" + "=" * 50)
+    print("Completed: \(successCount) succeeded, \(failCount) failed")
+    print("JSON files saved to: \(skeletonsDir.path)")
 }
 
 // Helper for string repetition
