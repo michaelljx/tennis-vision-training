@@ -1,0 +1,13 @@
+<View>
+  <Header value="Tennis Stroke Annotation"/>
+  <Text name="instruction" value="在击球瞬间暂停视频，在球员身上画一个框，然后选择击球类型。"/>
+  <Video name="video" value="$video" sync="audio"/>
+  <VideoRectangle name="box" toName="video" smart="true"/>
+  <Labels name="stroke_type" toName="video" perRegion="true">
+    <Label value="forehand" background="#28a745"/>
+    <Label value="backhand" background="#17a2b8"/>
+    <Label value="serve" background="#ffc107"/>
+    <Label value="volley" background="#007bff"/>
+    <Label value="invalid" background="#dc3545"/>
+  </Labels>
+</View>
