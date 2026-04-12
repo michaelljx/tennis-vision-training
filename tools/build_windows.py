@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 build_windows.py — Phase 3: Dataset construction (45-frame windows)
 
@@ -128,14 +129,31 @@ def extract_window(all_frames: list, stroke_frame_idx: int, pre: int, post: int)
 def infer_player_id(video_stem: str) -> str:
     """
     Infer player ID from video filename prefix.
-    Convention: 'video1-...' → 'p01', 'video2-...' → 'p02', etc.
-    Extend this as you add more players.
+
+    Mapping (confirmed by user 2026-04-09):
+      video1-* / video2-*  → p01  (Player 1 — same person, two session groups)
+      video3-*             → p02  (Player 2)
+      video4-*             → p03  (Player 3)
+      video5-*             → p04  (Player 4)
+      video6-*             → p05  (Player 5)
+      video7-*             → p06  (Player 6)
+      04-09-2026-*         → p07  (Players 7-14+, multi-player group from 2026-04-09 session)
     """
-    # Try to extract a numeric prefix
-    for prefix in video_stem.split("-"):
-        digits = "".join(c for c in prefix if c.isdigit())
-        if digits:
-            return f"p{int(digits):02d}"
+    s = video_stem.lower()
+    if s.startswith("video1") or s.startswith("video2"):
+        return "p01"
+    if s.startswith("video3"):
+        return "p02"
+    if s.startswith("video4"):
+        return "p03"
+    if s.startswith("video5"):
+        return "p04"
+    if s.startswith("video6"):
+        return "p05"
+    if s.startswith("video7"):
+        return "p06"
+    if s.startswith("04-"):
+        return "p07"
     return "p00"  # fallback
 
 
