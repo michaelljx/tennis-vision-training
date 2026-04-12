@@ -99,6 +99,8 @@ class Graph:
 def _normalize(A: np.ndarray) -> np.ndarray:
     """D^{-1/2} A D^{-1/2} normalization."""
     rowsum = A.sum(axis=1)
-    d_inv_sqrt = np.where(rowsum > 0, rowsum ** -0.5, 0.0)
+    # Use errstate to suppress divide-by-zero for isolated nodes (set to 0 afterward)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        d_inv_sqrt = np.where(rowsum > 0, np.power(rowsum, -0.5, where=rowsum > 0), 0.0)
     D_inv_sqrt = np.diag(d_inv_sqrt)
     return D_inv_sqrt @ A @ D_inv_sqrt
