@@ -7,7 +7,10 @@ __pycache__/
 # Data (large files, manage separately)
 data/raw_videos/*.mov
 data/raw_videos/*.mp4
+data/raw_videos_h264/
+data/skeletons_30fps/
 data/windows/*.npz
+data/_debug/
 *.npz
 *.zip
 

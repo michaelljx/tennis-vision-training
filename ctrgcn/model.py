@@ -80,7 +80,7 @@ class SpatialConv(nn.Module):
         self.V = V
         self.adaptive = adaptive
 
-        self.register_buffer("A_base", torch.from_numpy(A.copy()).float())  # (K, V, V)
+        self.register_buffer("A_base", torch.tensor(A.copy(), dtype=torch.float32))  # (K, V, V)
 
         if adaptive:
             self.B = nn.Parameter(torch.zeros(K, V, V))

@@ -52,7 +52,7 @@ JOINT_NAMES = [
 ]
 JOINT_INDEX = {name: i for i, name in enumerate(JOINT_NAMES)}
 
-CLASS_NAMES = ["forehand", "backhand", "serve", "volley", "invalid"]
+CLASS_NAMES = ["forehand", "backhand", "serve", "invalid"]
 CLASS_INDEX = {name: i for i, name in enumerate(CLASS_NAMES)}
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -126,19 +126,126 @@ def extract_window(all_frames: list, stroke_frame_idx: int, pre: int, post: int)
     return frames_to_array([all_frames[i] for i in indices])
 
 
+# ── 22-Player exact mapping for 04- prefix videos ─────────────────────────
+# Confirmed by user 2026-04-13 from 球员视频识别.md
+# video1-7 prefixes use prefix matching below; 04- videos use exact matching.
+VIDEO_TO_PLAYER: dict[str, str] = {
+    # P8: 04-09-2026-Current-Point subset
+    "04-09-2026-Current-Point 6":  "p08",
+    "04-09-2026-Current-Point 7":  "p08",
+    "04-09-2026-Current-Point 8":  "p08",
+    "04-09-2026-Current-Point 9":  "p08",
+    "04-09-2026-Current-Point 15": "p08",
+    # P9
+    "04-09-2026-Current-Point 5":  "p09",
+    "04-09-2026-Current-Point 10": "p09",
+    "04-09-2026-Current-Point 16": "p09",
+    "04-09-2026-Current-Point 17": "p09",
+    "04-09-2026-Current-Point 19": "p09",
+    # P10
+    "04-09-2026-Current-Point 12": "p10",
+    "04-09-2026-Current-Point 13": "p10",
+    "04-09-2026-Current-Point 18": "p10",
+    # P11 (includes unnumbered Point)
+    "04-09-2026-Current-Point":    "p11",
+    "04-09-2026-Current-Point 2":  "p11",
+    "04-09-2026-Current-Point 3":  "p11",
+    "04-09-2026-Current-Point 4":  "p11",
+    "04-09-2026-Current-Point 11": "p11",
+    "04-09-2026-Current-Point 14": "p11",
+    # P12: 04-10-2026-Current-Rally 19-27
+    "04-10-2026-Current-Rally 19": "p12",
+    "04-10-2026-Current-Rally 20": "p12",
+    "04-10-2026-Current-Rally 21": "p12",
+    "04-10-2026-Current-Rally 22": "p12",
+    "04-10-2026-Current-Rally 23": "p12",
+    "04-10-2026-Current-Rally 24": "p12",
+    "04-10-2026-Current-Rally 25": "p12",
+    "04-10-2026-Current-Rally 26": "p12",
+    "04-10-2026-Current-Rally 27": "p12",
+    # P13: 04-10-2026-Current-Point (includes unnumbered)
+    "04-10-2026-Current-Point":    "p13",
+    "04-10-2026-Current-Point 2":  "p13",
+    "04-10-2026-Current-Point 3":  "p13",
+    "04-10-2026-Current-Point 4":  "p13",
+    "04-10-2026-Current-Point 5":  "p13",
+    # P14: 04-10-2026-Current-Rally 9-18
+    "04-10-2026-Current-Rally 9":  "p14",
+    "04-10-2026-Current-Rally 10": "p14",
+    "04-10-2026-Current-Rally 11": "p14",
+    "04-10-2026-Current-Rally 12": "p14",
+    "04-10-2026-Current-Rally 13": "p14",
+    "04-10-2026-Current-Rally 14": "p14",
+    "04-10-2026-Current-Rally 15": "p14",
+    "04-10-2026-Current-Rally 16": "p14",
+    "04-10-2026-Current-Rally 17": "p14",
+    "04-10-2026-Current-Rally 18": "p14",
+    # P15: 04-09-2026-Current-Rally 14, 22-29
+    "04-09-2026-Current-Rally 14": "p15",
+    "04-09-2026-Current-Rally 22": "p15",
+    "04-09-2026-Current-Rally 23": "p15",
+    "04-09-2026-Current-Rally 24": "p15",
+    "04-09-2026-Current-Rally 25": "p15",
+    "04-09-2026-Current-Rally 26": "p15",
+    "04-09-2026-Current-Rally 27": "p15",
+    "04-09-2026-Current-Rally 28": "p15",
+    "04-09-2026-Current-Rally 29": "p15",
+    # P16: 04-09-2026-Current-Rally 12, 13, 16, 20, 21
+    "04-09-2026-Current-Rally 12": "p16",
+    "04-09-2026-Current-Rally 13": "p16",
+    "04-09-2026-Current-Rally 16": "p16",
+    "04-09-2026-Current-Rally 20": "p16",
+    "04-09-2026-Current-Rally 21": "p16",
+    # P17: 04-09-2026-Current-Rally 15, 17, 19
+    "04-09-2026-Current-Rally 15": "p17",
+    "04-09-2026-Current-Rally 17": "p17",
+    "04-09-2026-Current-Rally 19": "p17",
+    # P18: 04-09-2026-Current-Rally 4, 5, 6, 11, 18
+    "04-09-2026-Current-Rally 4":  "p18",
+    "04-09-2026-Current-Rally 5":  "p18",
+    "04-09-2026-Current-Rally 6":  "p18",
+    "04-09-2026-Current-Rally 11": "p18",
+    "04-09-2026-Current-Rally 18": "p18",
+    # P19: 04-09-2026-Current-Rally 7, 8, 9, 10
+    "04-09-2026-Current-Rally 7":  "p19",
+    "04-09-2026-Current-Rally 8":  "p19",
+    "04-09-2026-Current-Rally 9":  "p19",
+    "04-09-2026-Current-Rally 10": "p19",
+    # P20: 04-10-2026-Current-Rally (unnumbered), 2-8
+    "04-10-2026-Current-Rally":    "p20",
+    "04-10-2026-Current-Rally 2":  "p20",
+    "04-10-2026-Current-Rally 3":  "p20",
+    "04-10-2026-Current-Rally 4":  "p20",
+    "04-10-2026-Current-Rally 5":  "p20",
+    "04-10-2026-Current-Rally 6":  "p20",
+    "04-10-2026-Current-Rally 7":  "p20",
+    "04-10-2026-Current-Rally 8":  "p20",
+    # P21
+    "04-10-2026-Filtered-Rallies": "p21",
+    # P22: 04-09-2026-Current-Rally (unnumbered), 2, 3
+    "04-09-2026-Current-Rally":    "p22",
+    "04-09-2026-Current-Rally 2":  "p22",
+    "04-09-2026-Current-Rally 3":  "p22",
+}
+
+
 def infer_player_id(video_stem: str) -> str:
     """
-    Infer player ID from video filename prefix.
+    Infer player ID from video filename.
 
-    Mapping (confirmed by user 2026-04-09):
-      video1-* / video2-*  → p01  (Player 1 — same person, two session groups)
-      video3-*             → p02  (Player 2)
-      video4-*             → p03  (Player 3)
-      video5-*             → p04  (Player 4)
-      video6-*             → p05  (Player 5)
-      video7-*             → p06  (Player 6)
-      04-09-2026-*         → p07  (Players 7-14+, multi-player group from 2026-04-09 session)
+    22-player mapping (confirmed 2026-04-13 from 球员视频识别.md):
+      p01: video1*, video2*  (same person, two session groups)
+      p02: video3*           (LEFT-HANDED)
+      p03: video4*
+      p04: video5*
+      p05: video6*
+      p06: video7*
+      p08-p22: 04- prefix videos — exact match via VIDEO_TO_PLAYER dict
     """
+    # Exact match for 04- videos
+    if video_stem in VIDEO_TO_PLAYER:
+        return VIDEO_TO_PLAYER[video_stem]
+    # Prefix match for video1-7
     s = video_stem.lower()
     if s.startswith("video1") or s.startswith("video2"):
         return "p01"
@@ -152,9 +259,7 @@ def infer_player_id(video_stem: str) -> str:
         return "p05"
     if s.startswith("video7"):
         return "p06"
-    if s.startswith("04-"):
-        return "p07"
-    return "p00"  # fallback
+    return "p00"  # fallback — should not happen with known videos
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
